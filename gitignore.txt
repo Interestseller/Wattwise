@@ -1,0 +1,23 @@
+# Smart Home Energy Predictor — .gitignore
+# RENAME THIS FILE TO .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Trained model artifacts
+models/*.joblib
+
+# User data — never commit private household data
+data/energy_dataset.csv
+data/*.csv
+!data/demo_energy_dataset.csv
+
+# Streamlit
+.streamlit/secrets.toml
