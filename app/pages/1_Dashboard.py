@@ -39,57 +39,76 @@ st.title("📊 Dashboard")
 st.markdown("Load your energy dataset, review data quality, and explore key statistics.")
 
 # ── Data source selector ─────────────────────────────────────────────────────
-st.markdown("### 1. Load Your Dataset")
+st.markdown("### 1. Dataset Source")
 
-source_option = st.radio(
-    "Data source",
-    options=["Upload CSV file", "Load from disk path", "Use demo dataset"],
-    horizontal=True,
-    help="Choose where to load your energy consumption data from.",
-)
+# Determine the default tab: if sample data is already loaded keep "Sample Data"
+# selected; once the user has loaded their own data keep that tab active.
+_current_source = st.session_state.get("dataset_source", "demo")
+_default_tab = 1 if _current_source in ("uploaded", "path") else 0  # 0 = Sample, 1 = Own
+
+tab_sample, tab_own = st.tabs(["🧪 Sample Data", "📂 Upload / Load Your Own Data"])
 
 df_raw = None
 profile = None
 filename = ""
 
-if source_option == "Upload CSV file":
-    uploaded = st.file_uploader(
-        "Upload your energy consumption CSV",
-        type=["csv"],
-        help="CSV file with at least one timestamp column and one numeric energy column.",
+# ── Tab 0 : Sample data ──────────────────────────────────────────────────────
+with tab_sample:
+    st.info(
+        "The **sample dataset** has been pre-loaded automatically — you can explore "
+        "all features of the app right away without uploading anything."
     )
-    if uploaded:
-        df_raw, profile = load_from_upload(uploaded)
-        filename = uploaded.name
-        st.session_state["dataset_source"] = "uploaded"
-
-elif source_option == "Load from disk path":
-    path_input = st.text_input(
-        "Dataset file path",
-        value=config.DATASET_PATH,
-        help="Absolute or relative path to your CSV file.",
-    )
-    if st.button("Load from path"):
-        df_raw, profile = load_from_path(path_input)
-        filename = os.path.basename(path_input)
-        st.session_state["dataset_source"] = "path"
-
-elif source_option == "Use demo dataset":
     st.warning(
-        "⚠️ **Demo dataset**: This is SYNTHETIC (artificial) data, not real household measurements. "
-        "Do not draw real-world conclusions from models trained on it."
+        "⚠️ **Synthetic data**: This dataset is artificially generated, not from real household "
+        "measurements. Do not draw real-world conclusions from models trained on it."
     )
-    if st.button("Load demo dataset"):
-        demo_df = generate_demo_dataset()
-        # Save to disk so the path-based loader can find it too
-        demo_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "data", "demo_energy_dataset.csv"
+
+    col_btn, col_status = st.columns([1, 3])
+    with col_btn:
+        if st.button("🔄 Reload sample data", help="Re-generate and reload the built-in sample dataset."):
+            demo_df = generate_demo_dataset()
+            demo_path = os.path.join(
+                os.path.dirname(__file__), "..", "..", "data", "demo_energy_dataset.csv"
+            )
+            os.makedirs(os.path.dirname(demo_path), exist_ok=True)
+            demo_df.to_csv(demo_path, index=False)
+            df_raw, profile = load_from_path(demo_path)
+            filename = "demo_energy_dataset.csv"
+            st.session_state["dataset_source"] = "demo"
+    with col_status:
+        if _current_source == "demo" and st.session_state.get("df") is not None:
+            st.success("✅ Sample dataset is active.")
+
+# ── Tab 1 : User's own data ──────────────────────────────────────────────────
+with tab_own:
+    source_option = st.radio(
+        "How would you like to load your data?",
+        options=["Upload CSV file", "Load from disk path"],
+        horizontal=True,
+        help="Choose where to load your energy consumption data from.",
+    )
+
+    if source_option == "Upload CSV file":
+        uploaded = st.file_uploader(
+            "Upload your energy consumption CSV",
+            type=["csv"],
+            help="CSV file with at least one timestamp column and one numeric energy column.",
         )
-        os.makedirs(os.path.dirname(demo_path), exist_ok=True)
-        demo_df.to_csv(demo_path, index=False)
-        df_raw, profile = load_from_path(demo_path)
-        filename = "demo_energy_dataset.csv"
-        st.session_state["dataset_source"] = "demo"
+        if uploaded:
+            df_raw, profile = load_from_upload(uploaded)
+            filename = uploaded.name
+            st.session_state["dataset_source"] = "uploaded"
+
+    elif source_option == "Load from disk path":
+        path_input = st.text_input(
+            "Dataset file path",
+            value=config.DATASET_PATH,
+            help="Absolute or relative path to your CSV file.",
+        )
+        if st.button("Load from path"):
+            df_raw, profile = load_from_path(path_input)
+            filename = os.path.basename(path_input)
+            st.session_state["dataset_source"] = "path"
 
 # ── Column selection ─────────────────────────────────────────────────────────
 if df_raw is not None and profile is not None:
@@ -284,8 +303,3 @@ A good dataset for this application has:
     with st.expander("Preview processed data (first 50 rows)"):
         st.dataframe(df.head(50), use_container_width=True)
 
-elif source_option != "Use demo dataset":
-    st.info(
-        "👆 Upload a CSV file or enter a file path above to get started. "
-        "You can also use the **demo dataset** to explore the application."
-    )

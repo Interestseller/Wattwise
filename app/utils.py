@@ -28,8 +28,59 @@ import config
 # Session state helpers
 # ---------------------------------------------------------------------------
 
+def _load_demo_into_session():
+    """Load and process the demo dataset into session state (silent, no UI)."""
+    try:
+        # Import here to avoid circular imports at module level
+        from data.generate_demo_data import generate_demo_dataset
+        from src.data_loader import load_from_path
+        from src.preprocessing import clean_series, resample_series
+
+        demo_path = os.path.join(
+            os.path.dirname(__file__), "..", "data", "demo_energy_dataset.csv"
+        )
+        # Generate the CSV if it doesn't exist yet
+        if not os.path.exists(demo_path):
+            demo_df = generate_demo_dataset()
+            os.makedirs(os.path.dirname(demo_path), exist_ok=True)
+            demo_df.to_csv(demo_path, index=False)
+
+        df_raw, profile = load_from_path(demo_path)
+        if profile is None or not profile.is_valid:
+            return
+
+        ts_col  = config.TIMESTAMP_COLUMN
+        tgt_col = config.TARGET_COLUMN
+        freq    = config.DEFAULT_RESAMPLE_FREQ
+
+        from src.data_loader import select_columns
+        df_sel, errs = select_columns(df_raw, ts_col, tgt_col)
+        if errs:
+            return
+
+        df_clean, _ = clean_series(df_sel, tgt_col)
+        df_resampled, _ = resample_series(df_clean, tgt_col, freq=freq)
+        df_resampled = df_resampled.dropna(subset=[tgt_col])
+
+        st.session_state["df"]            = df_resampled
+        st.session_state["df_raw"]        = df_raw
+        st.session_state["profile"]       = profile
+        st.session_state["timestamp_col"] = ts_col
+        st.session_state["target_col"]    = tgt_col
+        st.session_state["energy_unit"]   = config.DEFAULT_UNIT
+        st.session_state["resample_freq"] = freq
+        st.session_state["dataset_source"] = "demo"
+    except Exception:
+        # Never crash the app on startup because of demo data
+        pass
+
+
 def init_session_state():
-    """Initialise all session-state keys with safe defaults."""
+    """Initialise all session-state keys with safe defaults.
+
+    On the very first run the demo dataset is automatically pre-loaded so
+    users can explore the app immediately without uploading anything.
+    """
     defaults = {
         "df":              None,   # processed DataFrame with DatetimeIndex
         "df_raw":          None,   # raw loaded DataFrame
@@ -51,6 +102,10 @@ def init_session_state():
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    # Auto-load sample data on first visit (only when no dataset is loaded yet)
+    if st.session_state["df"] is None:
+        _load_demo_into_session()
 
 
 def set_dataset(df: pd.DataFrame, source: str = "uploaded"):

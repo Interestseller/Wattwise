@@ -101,7 +101,7 @@ with st.sidebar:
         target = st.session_state.get("target_col", "?")
         st.caption(f"{n_rows:,} rows · target: `{target}`")
     else:
-        st.info("No dataset loaded yet.\nGo to **Dashboard** to load data.")
+        st.info("No dataset loaded yet.\nGo to **📊 Dashboard** to load data.")
 
     if st.session_state.get("model_bundle") is not None:
         meta = st.session_state["model_bundle"]
@@ -116,15 +116,26 @@ with st.sidebar:
 st.markdown('<div class="main-title">⚡ Smart Home Energy Intelligence</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">AI-powered energy analytics and forecasting for your home</div>', unsafe_allow_html=True)
 
+# Show a banner when the sample dataset is already pre-loaded
+if st.session_state.get("dataset_source") == "demo" and st.session_state.get("df") is not None:
+    st.success(
+        "🧪 **Sample dataset pre-loaded** — you can explore every page right now! "
+        "Head to **📊 Dashboard** → *Upload / Load Your Own Data* tab whenever you want to use your own data."
+    )
+
 col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("""
     #### 🚀 Getting Started
-    1. Go to **📊 Dashboard** and upload your CSV dataset
-    2. Train an ML model on **🤖 Train ML Model**
-    3. View forecasts on **🔮 Forecasting**
-    4. Detect unusual patterns on **⚠️ Anomaly Detection**
-    5. Estimate your bill on **💰 Bill Estimator**
+    A **sample dataset is pre-loaded** so you can explore immediately.
+
+    To use your own data:
+    1. Go to **📊 Dashboard** → *Upload / Load Your Own Data* tab
+    2. Upload your CSV or enter a file path, then apply column selection
+    3. Train an ML model on **🤖 Train ML Model**
+    4. View forecasts on **🔮 Forecasting**
+    5. Detect unusual patterns on **⚠️ Anomaly Detection**
+    6. Estimate your bill on **💰 Bill Estimator**
     """)
 
 with col2:
@@ -153,5 +164,5 @@ with col3:
 st.markdown("---")
 st.info(
     "👆 Use the **sidebar** or the page links above to navigate. "
-    "Start with **📊 Dashboard** to load your dataset."
+    "A sample dataset is already loaded — or go to **📊 Dashboard** to use your own data."
 )
