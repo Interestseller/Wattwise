@@ -8,7 +8,7 @@ An AI-powered electricity analytics and forecasting platform that turns raw smar
 
 <br/>
 
-[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://wattwise-ira9cb43qz5rfrszg3nrlb.streamlit.app/)
+
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![Scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white)](https://scikit-learn.org)
 [![Plotly](https://img.shields.io/badge/Plotly-Interactive-3F4F75?style=for-the-badge&logo=plotly&logoColor=white)](https://plotly.com)
@@ -17,7 +17,6 @@ An AI-powered electricity analytics and forecasting platform that turns raw smar
 
 <br/>
 
-[🌐 Live Demo](https://wattwise-ira9cb43qz5rfrszg3nrlb.streamlit.app/) •
 [✨ Features](#-features) •
 [🏗️ Architecture](#️-architecture) •
 [⚙️ Installation](#️-installation) •
