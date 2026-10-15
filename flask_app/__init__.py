@@ -1,0 +1,1 @@
+"""WattWise Flask application package."""

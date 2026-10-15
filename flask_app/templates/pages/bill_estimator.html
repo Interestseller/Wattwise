@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block page_title %}Bill Estimator{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-primary" onclick="estimateBill()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="1" x2="12" y2="23"/>
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </svg>
+  Calculate Bill
+</button>
+{% endblock %}
+
+{% block content %}
+
+<div class="col-4060">
+
+  <!-- ── Left: Input panel ───────────────────────────────────────────────── -->
+  <div>
+    <div class="form-card" style="margin-bottom:14px">
+      <div class="chart-card-title" style="margin-bottom:14px">Tariff Settings</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label" for="inp-tariff">Energy rate (₹/kWh)</label>
+          <input class="form-input form-input-wide" id="inp-tariff" type="number" step="0.01" min="0" value="6.50" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inp-fixed">Fixed monthly charge (₹)</label>
+          <input class="form-input form-input-wide" id="inp-fixed" type="number" step="1" min="0" value="50" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inp-tax">Tax / surcharge (%)</label>
+          <input class="form-input form-input-wide" id="inp-tax" type="number" step="0.1" min="0" max="100" value="5" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inp-days">Billing period (days)</label>
+          <select class="form-select form-input-wide" id="inp-days">
+            <option value="30" selected>30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-card">
+      <div class="chart-card-title" style="margin-bottom:10px">Reduction Scenario</div>
+      <p style="font-size:11px;color:var(--text-muted);margin-bottom:14px">Simulate savings by reducing consumption.</p>
+      <div class="form-group">
+        <label class="form-label">
+          Consumption reduction:
+          <strong id="reduction-pct-label" style="color:var(--accent)">0%</strong>
+        </label>
+        <input type="range" id="inp-reduction" min="0" max="50" step="1" value="0"
+          oninput="document.getElementById('reduction-pct-label').textContent = this.value + '%'; syncSlider(this); estimateBill()" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Right: Results ─────────────────────────────────────────────────── -->
+  <div>
+    <div class="bill-summary" style="margin-bottom:14px" id="bill-result">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Daily usage chart -->
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div>
+          <div class="chart-card-title">Daily Usage Trend</div>
+          <div class="chart-card-sub" id="bill-chart-sub">Actual consumption used for this estimate</div>
+        </div>
+      </div>
+      <div class="chart-container" id="bill-chart" style="height:220px">
+        <div class="loading-spinner"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+
+// Keep the accent-filled track in sync with the thumb position
+function syncSlider(el) {
+  const pct = ((el.value - el.min) / (el.max - el.min)) * 100;
+  el.style.setProperty("--range-pct", pct + "%");
+}
+
+let _billDebounce = null;
+
+function estimateBill() {
+  clearTimeout(_billDebounce);
+  _billDebounce = setTimeout(_doEstimate, 350);
+}
+
+async function _doEstimate() {
+  const tariff    = parseFloat(document.getElementById("inp-tariff").value)   || 6.5;
+  const fixed     = parseFloat(document.getElementById("inp-fixed").value)    || 50;
+  const taxRate   = parseFloat(document.getElementById("inp-tax").value) / 100 || 0.05;
+  const reduction = parseFloat(document.getElementById("inp-reduction").value) || 0;
+  const days      = parseInt(document.getElementById("inp-days").value)        || 30;
+
+  const { ok, data } = await apiPost("/api/bill-estimate", {
+    tariff, fixed_charge: fixed, tax_rate: taxRate, reduction_pct: reduction, days,
+  });
+
+  if (!ok || data.error) {
+    document.getElementById("bill-result").innerHTML =
+      `<div class="error-state"><span>${data.error}</span></div>`;
+    return;
+  }
+
+  showDemoBanner(data.is_demo);
+  renderBillResult(data);
+  renderBillChart(data);
+}
+
+function renderBillResult(d) {
+  const savings = d.reduction_pct > 0
+    ? ((d.total_kwh - d.adjusted_kwh) * d.tariff).toFixed(2)
+    : null;
+
+  document.getElementById("bill-result").innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:14px">
+      Bill Breakdown · ${d.currency}
+    </div>
+    <div class="bill-row"><span class="bill-label">Actual consumption</span><span class="bill-value">${fmt(d.total_kwh)} kWh</span></div>
+    ${d.reduction_pct > 0 ? `<div class="bill-row"><span class="bill-label">After ${d.reduction_pct}% reduction</span><span class="bill-value">${fmt(d.adjusted_kwh)} kWh</span></div>` : ""}
+    <div class="bill-row"><span class="bill-label">Energy cost (${d.currency}${d.tariff}/kWh)</span><span class="bill-value">${d.currency}${fmt(d.energy_cost)}</span></div>
+    <div class="bill-row"><span class="bill-label">Tax / surcharge (${(d.tax_rate * 100).toFixed(0)}%)</span><span class="bill-value">${d.currency}${fmt(d.tax)}</span></div>
+    <div class="bill-row"><span class="bill-label">Fixed monthly charge</span><span class="bill-value">${d.currency}${fmt(d.fixed_charge)}</span></div>
+    ${savings ? `<div class="bill-row" style="color:var(--green)"><span class="bill-label">Est. savings from reduction</span><span class="bill-value">− ${d.currency}${savings}</span></div>` : ""}
+    <div class="bill-row total"><span class="bill-label">Total Estimated Bill</span><span class="bill-value">${d.currency}${fmt(d.total_bill)}</span></div>
+    <p style="margin-top:12px;font-size:11px;color:var(--text-muted)">
+      Based on ${d.daily_avg_kwh} kWh/day average · Tariff: ${d.currency}${d.tariff}/kWh
+    </p>`;
+}
+
+function renderBillChart(d) {
+  const el = document.getElementById("bill-chart");
+  document.getElementById("bill-chart-sub").textContent =
+    `Daily actual consumption · ${d.daily_chart.dates.length} days`;
+
+  const projected = d.reduction_pct > 0
+    ? d.daily_chart.values.map(v => +(v * (1 - d.reduction_pct / 100)).toFixed(3))
+    : null;
+
+  const traces = [{
+    x: d.daily_chart.dates,
+    y: d.daily_chart.values,
+    name: "Actual",
+    type: "bar",
+    marker: { color: WW.PURPLE, opacity: 0.8 },
+    hovertemplate: "%{y:.3f} kWh<extra>Actual</extra>",
+  }];
+
+  if (projected) {
+    traces.push({
+      x: d.daily_chart.dates,
+      y: projected,
+      name: `After ${d.reduction_pct}% reduction`,
+      type: "scatter",
+      mode: "lines",
+      line: { color: WW.GREEN, width: 2, dash: "dot" },
+      hovertemplate: "%{y:.3f} kWh<extra>Projected</extra>",
+    });
+  }
+
+  Plotly.react(el, traces, WW.layout({
+    bargap: 0.1,
+    margin: { t: 6, r: 14, b: 50, l: 54 },
+    yaxis: { title: { text: "kWh/day" } },
+  }), WW.config());
+}
+
+// Initial load — sync slider track then fetch
+document.addEventListener("DOMContentLoaded", () => {
+  syncSlider(document.getElementById("inp-reduction"));
+});
+estimateBill();
+</script>
+{% endblock %}

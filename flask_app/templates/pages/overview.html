@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block page_title %}Overview{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-primary" id="refresh-btn" onclick="loadOverview()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="23 4 23 10 17 10"/>
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </svg>
+  Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── KPI Cards ─────────────────────────────────────────────────────────── -->
+<div class="kpi-grid" id="kpi-grid">
+  <!-- Card 1: Current Usage -->
+  <div class="kpi-card" id="kpi-usage">
+    <div class="kpi-header">
+      <span class="kpi-label">Current Energy Usage</span>
+      <div class="kpi-icon purple">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="kpi-usage-val">—</div>
+    <div class="kpi-change neutral" id="kpi-usage-change">— vs previous period</div>
+  </div>
+
+  <!-- Card 2: Estimated Bill -->
+  <div class="kpi-card" id="kpi-bill">
+    <div class="kpi-header">
+      <span class="kpi-label">Estimated Monthly Bill</span>
+      <div class="kpi-icon green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="1" x2="12" y2="23"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+        </svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="kpi-bill-val">—</div>
+    <div class="kpi-change neutral" id="kpi-bill-sub">Based on ₹6.50/kWh + tax</div>
+  </div>
+
+  <!-- Card 3: Peak Hours / Anomalies -->
+  <div class="kpi-card" id="kpi-peak">
+    <div class="kpi-header">
+      <span class="kpi-label">Peak Usage Hour</span>
+      <div class="kpi-icon amber">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="kpi-peak-val">—</div>
+    <div class="kpi-change neutral" id="kpi-peak-sub">Active anomaly alerts</div>
+  </div>
+</div>
+
+<!-- ── Energy Trend Chart ────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-bottom:14px">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">Energy Usage Over Time</div>
+      <div class="chart-card-sub">Daily consumption — current vs. previous period</div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item">
+        <div class="legend-line" style="background:#9B87F5"></div>
+        Current Usage
+      </div>
+      <div class="legend-item">
+        <div class="legend-line" style="background:#4a4a55;border-top:2px dashed #4a4a55;height:0"></div>
+        Historical Avg
+      </div>
+    </div>
+  </div>
+  <div class="chart-container" id="trend-chart" style="height:260px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Lower Panels ───────────────────────────────────────────────────────── -->
+<div class="two-col">
+  <!-- Left: Weekly comparison bar chart -->
+  <div class="chart-card">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Usage by Week</div>
+        <div class="chart-card-sub">Last 4 weeks comparison</div>
+      </div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#9B87F5"></div>Current</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4a4a55"></div>Previous</div>
+      </div>
+    </div>
+    <div class="chart-container" id="weekly-chart" style="height:220px">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Right: Time-of-day distribution -->
+  <div class="chart-card">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Usage by Time of Day</div>
+        <div class="chart-card-sub">Consumption distribution (% share)</div>
+      </div>
+    </div>
+    <div class="chart-container" id="tod-chart" style="height:220px">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Insights Panel ─────────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-top:14px" id="insights-panel">
+  <div class="chart-card-title" style="margin-bottom:14px">⚡ Energy Insights</div>
+  <div id="insights-list" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;color:var(--text-secondary)">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function loadOverview() {
+  const { ok, data } = await apiGet("/api/overview?days=30");
+  if (!ok || data.error) {
+    setError(document.getElementById("kpi-grid"), data.error || "Failed to load data");
+    return;
+  }
+
+  showDemoBanner(data.is_demo);
+
+  // ── KPI: Usage
+  const usageEl = document.getElementById("kpi-usage-val");
+  usageEl.innerHTML = `${fmtK(data.current_usage)}<span class="unit">kWh</span>`;
+  const usageChg = document.getElementById("kpi-usage-change");
+  if (data.pct_change != null) {
+    const dir = data.pct_change > 0 ? "up" : "down";
+    const arrow = data.pct_change > 0 ? "↑" : "↓";
+    usageChg.className = `kpi-change ${dir}`;
+    usageChg.innerHTML = `${arrow} ${Math.abs(data.pct_change).toFixed(1)}% <span class="kpi-change-label">vs previous period</span>`;
+  } else {
+    usageChg.textContent = "No prior period data";
+  }
+
+  // ── KPI: Bill
+  document.getElementById("kpi-bill-val").innerHTML =
+    `${data.bill >= 100 ? fmt(data.bill, 0) : fmt(data.bill, 2)}<span class="unit">₹</span>`;
+  document.getElementById("kpi-bill-sub").textContent = "Estimated at ₹6.50/kWh + 5% tax";
+
+  // ── KPI: Peak / Anomalies
+  document.getElementById("kpi-peak-val").innerHTML =
+    `${data.peak_hour}:00<span class="unit">peak</span>`;
+  const peakSub = document.getElementById("kpi-peak-sub");
+  peakSub.className = data.n_anomalies > 0 ? "kpi-change up" : "kpi-change down";
+  peakSub.innerHTML = data.n_anomalies > 0
+    ? `↑ ${data.n_anomalies} active anomaly alert${data.n_anomalies !== 1 ? "s" : ""}`
+    : "↓ No active anomalies";
+
+  // ── Trend chart
+  renderTrendChart(data.trend);
+
+  // ── Weekly chart
+  renderWeeklyChart(data.weekly);
+
+  // ── ToD chart
+  renderTodChart(data.tod_breakdown);
+
+  // ── Insights
+  renderInsights(data);
+}
+
+function renderTrendChart(trend) {
+  const el = document.getElementById("trend-chart");
+  const traces = [];
+
+  if (trend.current && trend.dates) {
+    traces.push({
+      x: trend.dates,
+      y: trend.current,
+      name: "Current Usage",
+      type: "scatter",
+      mode: "lines+markers",
+      line: { color: WW.PURPLE, width: 2.5, shape: "spline" },
+      marker: { color: WW.PURPLE, size: 5, symbol: "circle" },
+      hovertemplate: "%{y:.2f} kWh<extra>Current</extra>",
+    });
+  }
+
+  if (trend.historical && trend.historical.length) {
+    traces.push({
+      x: trend.hist_dates,
+      y: trend.historical,
+      name: "Historical Avg",
+      type: "scatter",
+      mode: "lines",
+      line: { color: WW.GREY, width: 1.5, dash: "dot" },
+      hovertemplate: "%{y:.2f} kWh<extra>Historical</extra>",
+    });
+  }
+
+  Plotly.react(el, traces, WW.layout({
+    margin: { t: 6, r: 14, b: 50, l: 54 },
+    xaxis: { title: { text: "" }, gridcolor: "#2a2a2a" },
+    yaxis: { title: { text: "kWh", standoff: 8 }, gridcolor: "#2a2a2a" },
+    hovermode: "x unified",
+  }), WW.config());
+}
+
+function renderWeeklyChart(weeks) {
+  const el = document.getElementById("weekly-chart");
+  if (!weeks || !weeks.length) { setError(el, "No weekly data"); return; }
+  Plotly.react(el, [{
+    x: weeks.map(w => w.label),
+    y: weeks.map(w => w.value),
+    type: "bar",
+    marker: {
+      color: weeks.map((_, i) => i === weeks.length - 1 ? WW.PURPLE : WW.GREY),
+      borderradius: 4,
+    },
+    hovertemplate: "%{y:.2f} kWh<extra></extra>",
+    name: "Weekly Usage",
+  }], WW.layout({
+    showlegend: false,
+    bargap: 0.3,
+    margin: { t: 6, r: 14, b: 40, l: 54 },
+    yaxis: { title: { text: "kWh" } },
+  }), WW.config());
+}
+
+function renderTodChart(tod) {
+  const el = document.getElementById("tod-chart");
+  if (!tod || !tod.labels) { setError(el, "No data"); return; }
+  Plotly.react(el, [{
+    labels: tod.labels,
+    values: tod.values,
+    type: "pie",
+    hole: 0.48,
+    marker: { colors: [WW.GREY2, WW.PURPLE2, WW.PURPLE, "#6b5ce7"] },
+    textinfo: "percent",
+    textfont: { color: "#F5F5F7", size: 11 },
+    hovertemplate: "%{label}: %{value:.1f}%<extra></extra>",
+  }], WW.layout({
+    showlegend: true,
+    legend: { orientation: "v", x: 0.75, y: 0.5, font: { size: 10 } },
+    margin: { t: 6, r: 10, b: 10, l: 10 },
+    hovermode: "closest",
+  }), WW.config());
+}
+
+function renderInsights(data) {
+  const el = document.getElementById("insights-list");
+  const items = [];
+
+  if (data.pct_change != null) {
+    const dir = data.pct_change > 0 ? "🔴" : "🟢";
+    items.push(`${dir} Usage is <strong>${Math.abs(data.pct_change).toFixed(1)}%</strong>
+      ${data.pct_change > 0 ? "higher" : "lower"} than the previous period.`);
+  }
+  items.push(`⚡ Peak consumption at <strong>${data.peak_hour}:00</strong>. Consider shifting loads to off-peak hours.`);
+  if (data.n_anomalies > 0) {
+    items.push(`⚠️ <strong>${data.n_anomalies}</strong> anomalous reading${data.n_anomalies !== 1 ? "s" : ""} detected in the last 30 days.`);
+  } else {
+    items.push(`✅ No anomalies detected in the current period.`);
+  }
+  if (data.current_usage) {
+    const daily = (data.current_usage / 30).toFixed(2);
+    items.push(`📊 Average daily consumption: <strong>${daily} kWh/day</strong>.`);
+  }
+
+  el.innerHTML = items.map(i =>
+    `<div style="padding:10px 12px;background:var(--bg-app);border-radius:6px;border:1px solid var(--border-light);line-height:1.6">${i}</div>`
+  ).join("");
+}
+
+// Init
+loadOverview();
+</script>
+{% endblock %}

@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% block page_title %}Model Lab{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-ghost" id="load-data-btn" onclick="openLoadDataModal()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+  Load Data
+</button>
+<button class="btn btn-primary" id="train-btn" onclick="startTraining()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polygon points="5 3 19 12 5 21 5 3"/>
+  </svg>
+  Train Model
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Training Status Banner ─────────────────────────────────────────────── -->
+<div id="training-status-bar" style="display:none;margin-bottom:18px"></div>
+
+<!-- ── Current Model Info ─────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-bottom:14px" id="model-info-card">
+  <div class="chart-card-title" style="margin-bottom:16px">Current Model</div>
+  <div id="model-info-body">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Metrics Grid ───────────────────────────────────────────────────────── -->
+<div style="margin-bottom:14px">
+  <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">
+    Best Model — Test Set Performance
+  </div>
+  <div class="metric-grid" id="metrics-grid">
+    <div class="metric-card"><div class="metric-card-label">MAE</div><div class="metric-card-value" id="m-mae">—</div><div class="metric-card-sub">Mean Abs. Error</div></div>
+    <div class="metric-card"><div class="metric-card-label">RMSE</div><div class="metric-card-value" id="m-rmse">—</div><div class="metric-card-sub">Root Mean Sq. Error</div></div>
+    <div class="metric-card"><div class="metric-card-label">R²</div><div class="metric-card-value" id="m-r2">—</div><div class="metric-card-sub">Variance explained</div></div>
+    <div class="metric-card"><div class="metric-card-label">MAPE</div><div class="metric-card-value" id="m-mape">—</div><div class="metric-card-sub">Avg % error</div></div>
+  </div>
+</div>
+
+<!-- ── Model Comparison Table + Bar Charts ───────────────────────────────── -->
+<div class="two-col">
+  <!-- Comparison Table -->
+  <div class="chart-card">
+    <div class="chart-card-title" style="margin-bottom:14px">Model Comparison (Test Set)</div>
+    <div id="comparison-table">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- RMSE bar chart -->
+  <div class="chart-card">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">RMSE by Model</div>
+        <div class="chart-card-sub">Lower is better · test set evaluation</div>
+      </div>
+    </div>
+    <div class="chart-container" id="rmse-chart" style="height:220px">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── R² bar chart ───────────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-top:14px">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">R² Score by Model</div>
+      <div class="chart-card-sub">Higher is better · 1.0 = perfect predictions</div>
+    </div>
+  </div>
+  <div class="chart-container" id="r2-chart" style="height:200px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Training info ──────────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-top:14px" id="train-info-card">
+  <div class="chart-card-title" style="margin-bottom:14px">Training Configuration</div>
+  <div id="train-info-body" style="font-size:12px;color:var(--text-secondary);line-height:1.9">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Load Data Modal ────────────────────────────────────────────────────── -->
+<div id="load-data-modal" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.6);align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px;width:440px;max-width:calc(100vw - 32px)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <span style="font-size:15px;font-weight:600;color:var(--text-primary)">Load Dataset</span>
+      <button onclick="closeLoadDataModal()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:4px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Drop zone -->
+    <label id="drop-zone" for="csv-file-input" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 20px;border:2px dashed var(--border);border-radius:var(--radius-md);cursor:pointer;transition:border-color 150ms,background 150ms;text-align:center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div>
+        <span style="font-size:13px;color:var(--text-primary);font-weight:500">Click to select a CSV file</span><br>
+        <span style="font-size:11px;color:var(--text-muted)">or drag and drop here</span>
+      </div>
+      <span id="drop-zone-filename" style="font-size:11px;color:var(--accent);display:none"></span>
+    </label>
+    <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="onFileSelected(this)">
+
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6">
+      CSV must contain a <code style="background:var(--bg-app);padding:1px 4px;border-radius:3px">DateTime</code>
+      column and a <code style="background:var(--bg-app);padding:1px 4px;border-radius:3px">Global_active_power</code> column.
+      The file will replace the current dataset.
+    </p>
+
+    <div id="upload-status" style="margin-top:12px;display:none"></div>
+
+    <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeLoadDataModal()">Cancel</button>
+      <button class="btn btn-primary" id="upload-btn" onclick="uploadFile()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Upload
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// ── Load Data Modal ──────────────────────────────────────────────────────────
+function openLoadDataModal() {
+  const modal = document.getElementById("load-data-modal");
+  modal.style.display = "flex";
+  // Reset state
+  document.getElementById("csv-file-input").value = "";
+  document.getElementById("drop-zone-filename").style.display = "none";
+  document.getElementById("upload-btn").disabled = true;
+  document.getElementById("upload-status").style.display = "none";
+  document.getElementById("drop-zone").style.borderColor = "";
+  document.getElementById("drop-zone").style.background = "";
+}
+
+function closeLoadDataModal() {
+  document.getElementById("load-data-modal").style.display = "none";
+}
+
+function onFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const nameEl = document.getElementById("drop-zone-filename");
+  nameEl.textContent = file.name;
+  nameEl.style.display = "inline";
+  document.getElementById("drop-zone").style.borderColor = "var(--accent)";
+  document.getElementById("drop-zone").style.background = "var(--accent-dim)";
+  document.getElementById("upload-btn").disabled = false;
+  document.getElementById("upload-status").style.display = "none";
+}
+
+async function uploadFile() {
+  const input = document.getElementById("csv-file-input");
+  const file = input.files[0];
+  if (!file) return;
+
+  const btn = document.getElementById("upload-btn");
+  const statusEl = document.getElementById("upload-status");
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner" style="width:12px;height:12px;border-width:2px"></div> Uploading…`;
+
+  const form = new FormData();
+  form.append("file", file);
+
+  let result;
+  try {
+    const r = await fetch("/api/upload", { method: "POST", body: form });
+    result = await r.json();
+  } catch (e) {
+    result = { error: e.message };
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `Upload`;
+  statusEl.style.display = "block";
+
+  if (result.error) {
+    statusEl.innerHTML = `<div class="training-status error" style="font-size:12px">✗ ${result.error}</div>`;
+    return;
+  }
+
+  statusEl.innerHTML = `<div class="training-status success" style="font-size:12px">
+    ✓ Loaded <strong>${result.filename}</strong> — ${result.rows.toLocaleString()} rows, ${result.columns.length} columns.
+    Refresh the page or retrain the model to use the new data.
+  </div>`;
+  document.getElementById("upload-btn").disabled = true;
+}
+
+// Drag-and-drop support
+document.addEventListener("DOMContentLoaded", () => {
+  const zone = document.getElementById("drop-zone");
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.style.borderColor = "var(--accent)"; });
+  zone.addEventListener("dragleave", () => { zone.style.borderColor = ""; });
+  zone.addEventListener("drop", e => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const input = document.getElementById("csv-file-input");
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    onFileSelected(input);
+  });
+  // Close modal on backdrop click
+  document.getElementById("load-data-modal").addEventListener("click", e => {
+    if (e.target === e.currentTarget) closeLoadDataModal();
+  });
+});
+
+
+async function loadModelInfo() {
+  const { ok, data } = await apiGet("/api/models");
+  if (!ok) return;
+
+  renderModelInfo(data);
+  renderMetrics(data.metrics);
+  renderComparison(data.metrics);
+  renderTrainInfo(data.metadata);
+}
+
+function renderModelInfo(data) {
+  const el = document.getElementById("model-info-body");
+  if (!data.model_exists) {
+    el.innerHTML = `<div class="training-status error">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      No trained model found. Click <strong>Train Model</strong> to train one.
+    </div>`;
+    return;
+  }
+  const meta = data.metadata || {};
+  const info = meta.training_info || {};
+  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div class="stat-chip">
+      <span class="stat-chip-label">Algorithm</span>
+      <span class="stat-chip-value" style="font-size:13px;text-transform:capitalize">
+        ${(meta.model_name || "—").replace(/_/g," ")}
+      </span>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-chip-label">Features</span>
+      <span class="stat-chip-value">${info.feature_count || (meta.feature_names || []).length || "—"}</span>
+    </div>
+    <div class="stat-chip">
+      <span class="stat-chip-label">Training rows</span>
+      <span class="stat-chip-value">${info.train_rows ? info.train_rows.toLocaleString() : "—"}</span>
+    </div>
+  </div>`;
+}
+
+function renderMetrics(metrics) {
+  const test = metrics.test_metrics || {};
+  // Find best model name by lowest RMSE
+  const bestName = Object.entries(test).sort((a,b) => (a[1].rmse||999) - (b[1].rmse||999))[0];
+  if (!bestName) return;
+
+  const m = bestName[1];
+  document.getElementById("m-mae").textContent  = m.mae  != null ? m.mae  : "—";
+  document.getElementById("m-rmse").textContent = m.rmse != null ? m.rmse : "—";
+  document.getElementById("m-r2").textContent   = m.r2   != null ? m.r2   : "—";
+  document.getElementById("m-mape").textContent = m.mape != null ? m.mape + "%" : "N/A";
+
+  // Colour-code R²
+  const r2El = document.getElementById("m-r2");
+  const r2 = m.r2 || 0;
+  r2El.style.color = r2 >= 0.9 ? "var(--green)" : r2 >= 0.7 ? "var(--accent)" : "var(--amber)";
+}
+
+function renderComparison(metrics) {
+  const test = metrics.test_metrics || {};
+  const models = Object.keys(test);
+  if (!models.length) {
+    document.getElementById("comparison-table").innerHTML = `<p style="color:var(--text-muted);font-size:12px">No metrics saved. Train a model first.</p>`;
+    setError(document.getElementById("rmse-chart"), "No metrics available");
+    setError(document.getElementById("r2-chart"),   "No metrics available");
+    return;
+  }
+
+  // Sort by RMSE
+  models.sort((a,b) => (test[a].rmse||999) - (test[b].rmse||999));
+  const bestModel = models[0];
+
+  // Table
+  const rows = models.map(name => {
+    const m = test[name];
+    const isBest = name === bestModel;
+    return `<tr>
+      <td style="color:${isBest ? "var(--accent)" : "var(--text-primary)"}">
+        ${name.replace(/_/g," ")} ${isBest ? '<span class="badge" style="background:var(--accent-dim);color:var(--accent)">best</span>' : ""}
+      </td>
+      <td>${m.mae  ?? "—"}</td>
+      <td>${m.rmse ?? "—"}</td>
+      <td style="color:${(m.r2||0)>=0.9?"var(--green)":(m.r2||0)>=0.7?"var(--accent)":"var(--amber)"}">${m.r2 ?? "—"}</td>
+      <td>${m.mape != null ? m.mape + "%" : "N/A"}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("comparison-table").innerHTML = `
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>R²</th><th>MAPE</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  // RMSE chart
+  Plotly.react("rmse-chart", [{
+    x: models.map(m => m.replace(/_/g," ")),
+    y: models.map(m => test[m].rmse),
+    type: "bar",
+    marker: {
+      color: models.map(m => m === bestModel ? WW.GREEN : WW.GREY),
+      borderradius: 4,
+    },
+    hovertemplate: "%{x}: %{y:.4f}<extra></extra>",
+    name: "RMSE",
+  }], WW.layout({
+    showlegend: false, bargap: 0.3,
+    margin: { t: 6, r: 14, b: 40, l: 60 },
+    yaxis: { title: { text: "RMSE" } },
+  }), WW.config());
+
+  // R² chart
+  Plotly.react("r2-chart", [{
+    x: models.map(m => m.replace(/_/g," ")),
+    y: models.map(m => test[m].r2),
+    type: "bar",
+    marker: {
+      color: models.map(m => m === bestModel ? WW.PURPLE : WW.GREY),
+      borderradius: 4,
+    },
+    hovertemplate: "%{x}: %{y:.4f}<extra></extra>",
+    name: "R²",
+  }], WW.layout({
+    showlegend: false, bargap: 0.3,
+    margin: { t: 6, r: 14, b: 40, l: 60 },
+    yaxis: { title: { text: "R²" }, range: [0, 1] },
+    shapes: [{
+      type: "line", x0: -0.5, x1: models.length - 0.5,
+      y0: 0.9, y1: 0.9,
+      line: { color: WW.GREEN, width: 1, dash: "dash" },
+    }],
+  }), WW.config());
+}
+
+function renderTrainInfo(metadata) {
+  const el = document.getElementById("train-info-body");
+  if (!metadata || !metadata.training_info) {
+    el.innerHTML = `<span style="color:var(--text-muted)">No training metadata available.</span>`;
+    return;
+  }
+  const info = metadata.training_info;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><span style="color:var(--text-muted)">Train period:</span> ${info.train_start?.split(" ")[0] || "—"} → ${info.train_end?.split(" ")[0] || "—"}</div>
+      <div><span style="color:var(--text-muted)">Validation:</span> ${info.val_start?.split(" ")[0] || "—"} → ${info.val_end?.split(" ")[0] || "—"}</div>
+      <div><span style="color:var(--text-muted)">Test:</span> ${info.test_start?.split(" ")[0] || "—"} → ${info.test_end?.split(" ")[0] || "—"}</div>
+      <div><span style="color:var(--text-muted)">Total rows:</span> ${info.total_rows?.toLocaleString() || "—"}</div>
+      <div><span style="color:var(--text-muted)">Train rows:</span> ${info.train_rows?.toLocaleString() || "—"}</div>
+      <div><span style="color:var(--text-muted)">Test rows:</span> ${info.test_rows?.toLocaleString() || "—"}</div>
+    </div>`;
+}
+
+async function startTraining() {
+  const btn = document.getElementById("train-btn");
+  const statusBar = document.getElementById("training-status-bar");
+
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Training…`;
+
+  statusBar.style.display = "block";
+  statusBar.innerHTML = `<div class="training-status running">
+    <div class="spinner" style="width:14px;height:14px;border-width:2px"></div>
+    Training all candidate models (Baseline, Random Forest, Gradient Boosting)…
+    This may take 1–2 minutes.
+  </div>`;
+
+  const { ok, data } = await apiPost("/api/train", {});
+
+  btn.disabled = false;
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Train Model`;
+
+  if (!ok || data.error) {
+    statusBar.innerHTML = `<div class="training-status error">
+      ✗ Training failed: ${data.error}
+    </div>`;
+    return;
+  }
+
+  statusBar.innerHTML = `<div class="training-status success">
+    ✓ Training complete! Best model: <strong>${data.best_model.replace(/_/g," ")}</strong>
+  </div>`;
+
+  // Reload model info
+  loadModelInfo();
+}
+
+loadModelInfo();
+</script>
+{% endblock %}

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block page_title %}AI Forecasting{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-primary" onclick="loadForecast()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+  </svg>
+  Run Forecast
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Horizon Selector ───────────────────────────────────────────────────── -->
+<div class="filter-bar" style="margin-bottom:20px">
+  <span class="filter-label">Forecast Horizon:</span>
+  <div class="filter-group" id="horizon-filter">
+    <button class="filter-btn active" data-val="24"  onclick="setHorizon(24)">Next 24 hours</button>
+    <button class="filter-btn"        data-val="168" onclick="setHorizon(168)">Next 7 days</button>
+    <button class="filter-btn"        data-val="720" onclick="setHorizon(720)">Next 30 days</button>
+  </div>
+</div>
+
+<!-- ── Model Info Chips ───────────────────────────────────────────────────── -->
+<div class="stats-row" id="model-chips">
+  <div class="stat-chip">
+    <span class="stat-chip-label">Model</span>
+    <span class="stat-chip-value" id="chip-model" style="font-size:12px">—</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Steps</span>
+    <span class="stat-chip-value" id="chip-steps">—</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Status</span>
+    <span class="stat-chip-value" id="chip-status" style="font-size:12px;color:var(--green)">Ready</span>
+  </div>
+</div>
+
+<!-- ── Forecast Chart ─────────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-bottom:14px">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">Energy Forecast</div>
+      <div class="chart-card-sub">Actual consumption (context) + ML forecast with uncertainty band</div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#9B87F5"></div> Actual</div>
+      <div class="legend-item"><div class="legend-line" style="background:#34d399"></div> Forecast</div>
+      <div class="legend-item"><div class="legend-dot" style="background:rgba(52,211,153,0.2);width:14px;height:8px;border-radius:2px"></div> Uncertainty</div>
+    </div>
+  </div>
+  <div class="chart-container" id="forecast-chart" style="height:320px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Forecast Summary ───────────────────────────────────────────────────── -->
+<div class="two-col">
+  <div class="chart-card">
+    <div class="chart-card-title" style="margin-bottom:14px">Forecast Summary</div>
+    <div id="forecast-summary" style="font-size:12px;color:var(--text-secondary)">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-title" style="margin-bottom:14px">How Forecasting Works</div>
+    <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
+      <p><strong style="color:var(--text-primary)">Recursive Multi-Step Forecasting</strong></p>
+      <p style="margin-top:8px">The model was trained to predict one step ahead. For longer horizons, each prediction is fed back as a lag feature for the next step.</p>
+      <ul style="margin-top:8px;padding-left:16px;display:flex;flex-direction:column;gap:4px">
+        <li>Calendar features capture daily & seasonal patterns</li>
+        <li>Lag features encode short-term autocorrelation</li>
+        <li>Rolling statistics capture recent volatility</li>
+        <li>Uncertainty grows with forecast horizon (√h scaling)</li>
+      </ul>
+      <p style="margin-top:10px;color:var(--text-muted)">⚠ Uncertainty intervals are heuristic estimates, not statistically rigorous prediction intervals.</p>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let _horizon = 24;
+
+function setHorizon(h) {
+  _horizon = h;
+  document.querySelectorAll("#horizon-filter .filter-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.val == h);
+  });
+  loadForecast();
+}
+
+async function loadForecast() {
+  document.getElementById("chip-status").textContent = "Loading…";
+  document.getElementById("chip-status").style.color = "var(--amber)";
+  document.getElementById("chip-steps").textContent = _horizon;
+  setLoading(document.getElementById("forecast-chart"));
+  setLoading(document.getElementById("forecast-summary"));
+
+  const { ok, data } = await apiGet(`/api/forecast?steps=${_horizon}`);
+
+  if (!ok || data.error) {
+    setError(document.getElementById("forecast-chart"), data.error);
+    document.getElementById("forecast-summary").innerHTML =
+      `<div class="error-state"><span>${data.error}</span></div>`;
+    document.getElementById("chip-status").textContent = "Error";
+    document.getElementById("chip-status").style.color = "var(--red)";
+    return;
+  }
+
+  showDemoBanner(data.is_demo);
+  document.getElementById("chip-model").textContent = data.model_name.replace("_", " ");
+  document.getElementById("chip-steps").textContent = _horizon;
+  document.getElementById("chip-status").textContent = "Ready";
+  document.getElementById("chip-status").style.color = "var(--green)";
+
+  renderForecastChart(data);
+  renderForecastSummary(data);
+}
+
+function renderForecastChart(data) {
+  const el = document.getElementById("forecast-chart");
+  const traces = [];
+
+  // Actual (context)
+  if (data.actual.dates.length) {
+    traces.push({
+      x: data.actual.dates,
+      y: data.actual.values,
+      name: "Actual",
+      type: "scatter",
+      mode: "lines+markers",
+      line: { color: WW.PURPLE, width: 2.5 },
+      marker: { size: 4, color: WW.PURPLE },
+      hovertemplate: "%{y:.3f} kWh<extra>Actual</extra>",
+    });
+  }
+
+  // Uncertainty band (upper)
+  traces.push({
+    x: data.forecast.dates,
+    y: data.forecast.upper,
+    name: "Upper bound",
+    type: "scatter",
+    mode: "lines",
+    line: { color: "transparent" },
+    showlegend: false,
+    hoverinfo: "skip",
+  });
+
+  // Uncertainty band fill
+  traces.push({
+    x: data.forecast.dates,
+    y: data.forecast.lower,
+    name: "Uncertainty",
+    type: "scatter",
+    mode: "lines",
+    fill: "tonexty",
+    fillcolor: "rgba(52,211,153,0.12)",
+    line: { color: "transparent" },
+    hoverinfo: "skip",
+  });
+
+  // Forecast line
+  traces.push({
+    x: data.forecast.dates,
+    y: data.forecast.predicted,
+    name: "Forecast",
+    type: "scatter",
+    mode: "lines",
+    line: { color: WW.GREEN, width: 2.5, dash: "dot" },
+    hovertemplate: "%{y:.3f} kWh<extra>Forecast</extra>",
+  });
+
+  // Divider annotation
+  const dividerDate = data.actual.dates[data.actual.dates.length - 1];
+
+  Plotly.react(el, traces, WW.layout({
+    margin: { t: 10, r: 14, b: 50, l: 54 },
+    yaxis: { title: { text: "kWh" } },
+    shapes: [{
+      type: "line",
+      x0: dividerDate, x1: dividerDate,
+      y0: 0, y1: 1,
+      yref: "paper",
+      line: { color: WW.GREY2, width: 1, dash: "dash" },
+    }],
+    annotations: [{
+      x: dividerDate, y: 1, yref: "paper",
+      text: "Forecast →", showarrow: false,
+      font: { color: WW.GREY2, size: 10 },
+      xanchor: "left", yanchor: "top", xshift: 6,
+    }],
+  }), WW.config());
+}
+
+function renderForecastSummary(data) {
+  const el = document.getElementById("forecast-summary");
+  const predicted = data.forecast.predicted;
+  const total = predicted.reduce((a, b) => a + b, 0);
+  const avg   = total / predicted.length;
+  const maxV  = Math.max(...predicted);
+  const minV  = Math.min(...predicted);
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="stat-chip">
+        <span class="stat-chip-label">Forecast Total</span>
+        <span class="stat-chip-value">${fmt(total, 2)}</span>
+        <span class="stat-chip-unit">kWh over ${_horizon} steps</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label">Avg per Step</span>
+        <span class="stat-chip-value">${fmt(avg, 3)}</span>
+        <span class="stat-chip-unit">kWh/step</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label">Forecast Peak</span>
+        <span class="stat-chip-value">${fmt(maxV, 3)}</span>
+        <span class="stat-chip-unit">kWh (max)</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-chip-label">Forecast Low</span>
+        <span class="stat-chip-value">${fmt(minV, 3)}</span>
+        <span class="stat-chip-unit">kWh (min)</span>
+      </div>
+    </div>
+    <p style="margin-top:12px;color:var(--text-muted);font-size:11px">
+      Model: <strong style="color:var(--accent)">${data.model_name}</strong> · ${_horizon} steps forecast
+    </p>`;
+}
+
+loadForecast();
+</script>
+{% endblock %}

@@ -1,62 +1,48 @@
 {
   "val_metrics": {
     "baseline": {
-      "mae": 0.1098,
-      "rmse": 0.2087,
-      "r2": 0.6926,
-      "mape": 12.21,
-      "n_samples": 2621
+      "mae": 0.139,
+      "rmse": 0.1805,
+      "r2": 0.7672,
+      "mape": 14.72,
+      "n_samples": 83
     },
     "random_forest": {
-      "mae": 0.0101,
-      "rmse": 0.1114,
-      "r2": 0.9124,
-      "mape": 0.7,
-      "n_samples": 2621
+      "mae": 0.0448,
+      "rmse": 0.0846,
+      "r2": 0.9489,
+      "mape": 3.56,
+      "n_samples": 83
     },
     "gradient_boosting": {
-      "mae": 0.0156,
-      "rmse": 0.1302,
-      "r2": 0.8803,
-      "mape": 1.24,
-      "n_samples": 2621
-    },
-    "xgboost": {
-      "mae": 0.0165,
-      "rmse": 0.1197,
-      "r2": 0.8989,
-      "mape": 1.44,
-      "n_samples": 2621
+      "mae": 0.0423,
+      "rmse": 0.2181,
+      "r2": 0.6602,
+      "mape": 4.0,
+      "n_samples": 83
     }
   },
   "test_metrics": {
     "baseline": {
-      "mae": 0.1139,
-      "rmse": 0.2489,
-      "r2": 0.5795,
-      "mape": 12.66,
-      "n_samples": 2621
+      "mae": 0.131,
+      "rmse": 0.1654,
+      "r2": 0.8176,
+      "mape": 13.59,
+      "n_samples": 83
     },
     "random_forest": {
-      "mae": 0.014,
-      "rmse": 0.1513,
-      "r2": 0.8447,
-      "mape": 0.88,
-      "n_samples": 2621
+      "mae": 0.0436,
+      "rmse": 0.0865,
+      "r2": 0.9501,
+      "mape": 3.33,
+      "n_samples": 83
     },
     "gradient_boosting": {
-      "mae": 0.0193,
-      "rmse": 0.1638,
-      "r2": 0.8179,
-      "mape": 1.45,
-      "n_samples": 2621
-    },
-    "xgboost": {
-      "mae": 0.0202,
-      "rmse": 0.1594,
-      "r2": 0.8275,
-      "mape": 1.51,
-      "n_samples": 2621
+      "mae": 0.0249,
+      "rmse": 0.1447,
+      "r2": 0.8605,
+      "mape": 2.19,
+      "n_samples": 83
     }
   }
 }

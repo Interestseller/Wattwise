@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block page_title %}Energy Analytics{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-primary" onclick="loadAnalytics()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="23 4 23 10 17 10"/>
+    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+  </svg>
+  Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Filter Bar ─────────────────────────────────────────────────────────── -->
+<div class="filter-bar">
+  <span class="filter-label">Period:</span>
+  <div class="filter-group" id="period-filter">
+    <button class="filter-btn" data-val="hourly"  onclick="setPeriod('hourly')">Hourly</button>
+    <button class="filter-btn active" data-val="daily" onclick="setPeriod('daily')">Daily</button>
+    <button class="filter-btn" data-val="weekly" onclick="setPeriod('weekly')">Weekly</button>
+    <button class="filter-btn" data-val="monthly" onclick="setPeriod('monthly')">Monthly</button>
+  </div>
+  <span class="filter-label" style="margin-left:8px">Range:</span>
+  <div class="filter-group" id="range-filter">
+    <button class="filter-btn" data-val="30"  onclick="setRange(30)">30d</button>
+    <button class="filter-btn active" data-val="90" onclick="setRange(90)">90d</button>
+    <button class="filter-btn" data-val="180" onclick="setRange(180)">6mo</button>
+    <button class="filter-btn" data-val="365" onclick="setRange(365)">1yr</button>
+  </div>
+</div>
+
+<!-- ── Stats Row ──────────────────────────────────────────────────────────── -->
+<div class="stats-row" id="stats-row">
+  <div class="stat-chip">
+    <span class="stat-chip-label">Average</span>
+    <span class="stat-chip-value" id="stat-avg">—</span>
+    <span class="stat-chip-unit">kWh</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Maximum</span>
+    <span class="stat-chip-value" id="stat-max">—</span>
+    <span class="stat-chip-unit">kWh</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Minimum</span>
+    <span class="stat-chip-value" id="stat-min">—</span>
+    <span class="stat-chip-unit">kWh</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Total</span>
+    <span class="stat-chip-value" id="stat-total">—</span>
+    <span class="stat-chip-unit">kWh</span>
+  </div>
+</div>
+
+<!-- ── Main Usage Chart ───────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-bottom:14px">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">Usage Over Time</div>
+      <div class="chart-card-sub" id="usage-chart-sub">Comparing current and previous period</div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#9B87F5"></div> Current</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4a4a55;border-top:2px dashed #4a4a55;height:0"></div> Previous</div>
+    </div>
+  </div>
+  <div class="chart-container" id="usage-chart" style="height:280px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Heatmap + Day-of-week ──────────────────────────────────────────────── -->
+<div class="two-col">
+  <!-- Day heatmap -->
+  <div class="chart-card">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Day-of-Week Heatmap</div>
+        <div class="chart-card-sub">Avg consumption per hour (Mon–Sun)</div>
+      </div>
+    </div>
+    <div class="chart-container" id="heatmap-chart" style="height:300px">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Hourly average bar chart -->
+  <div class="chart-card">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Average Hourly Profile</div>
+        <div class="chart-card-sub">Mean consumption by hour of day</div>
+      </div>
+    </div>
+    <div class="chart-container" id="hourly-profile-chart" style="height:300px">
+      <div class="loading-spinner"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let _period = "daily";
+let _days   = 90;
+
+function setPeriod(p) {
+  _period = p;
+  document.querySelectorAll("#period-filter .filter-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.val === p);
+  });
+  loadAnalytics();
+}
+
+function setRange(d) {
+  _days = d;
+  document.querySelectorAll("#range-filter .filter-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.val == d);
+  });
+  loadAnalytics();
+}
+
+async function loadAnalytics() {
+  ["usage-chart", "heatmap-chart", "hourly-profile-chart"].forEach(id => {
+    setLoading(document.getElementById(id));
+  });
+
+  const { ok, data } = await apiGet(`/api/analytics?period=${_period}&days=${_days}`);
+  if (!ok || data.error) {
+    ["usage-chart", "heatmap-chart", "hourly-profile-chart"].forEach(id =>
+      setError(document.getElementById(id), data.error || "Failed to load")
+    );
+    return;
+  }
+
+  showDemoBanner(data.is_demo);
+
+  // Stats
+  document.getElementById("stat-avg").textContent   = fmt(data.stats.mean, 3);
+  document.getElementById("stat-max").textContent   = fmt(data.stats.max, 3);
+  document.getElementById("stat-min").textContent   = fmt(data.stats.min, 3);
+  document.getElementById("stat-total").textContent = fmtK(data.stats.total);
+
+  document.getElementById("usage-chart-sub").textContent =
+    `${_period.charAt(0).toUpperCase() + _period.slice(1)} view · last ${_days} days vs previous`;
+
+  renderUsageChart(data);
+  renderHeatmap(data.heatmap);
+  renderHourlyProfile(data.heatmap);
+}
+
+function renderUsageChart(data) {
+  const el = document.getElementById("usage-chart");
+  const traces = [{
+    x: data.dates,
+    y: data.values,
+    name: "Current",
+    type: "scatter",
+    mode: "lines",
+    line: { color: WW.PURPLE, width: 2.5 },
+    fill: "tozeroy",
+    fillcolor: "rgba(155,135,245,0.06)",
+    hovertemplate: "%{y:.3f} kWh<extra>Current</extra>",
+  }];
+  if (data.prev_values && data.prev_values.length) {
+    traces.push({
+      x: data.prev_dates,
+      y: data.prev_values,
+      name: "Previous",
+      type: "scatter",
+      mode: "lines",
+      line: { color: WW.GREY, width: 1.5, dash: "dot" },
+      hovertemplate: "%{y:.3f} kWh<extra>Previous</extra>",
+    });
+  }
+  Plotly.react(el, traces, WW.layout({
+    margin: { t: 6, r: 14, b: 50, l: 54 },
+    yaxis: { title: { text: "kWh" } },
+  }), WW.config());
+}
+
+function renderHeatmap(heatmap) {
+  const el = document.getElementById("heatmap-chart");
+  if (!heatmap || !heatmap.days) { setError(el, "No heatmap data"); return; }
+  Plotly.react(el, [{
+    z: heatmap.z,
+    x: heatmap.hours.map(h => `${h}:00`),
+    y: heatmap.days,
+    type: "heatmap",
+    colorscale: [
+      [0,   "#1a1a2e"],
+      [0.3, "#2d1b69"],
+      [0.6, "#7c3aed"],
+      [0.8, "#9B87F5"],
+      [1,   "#c4b5fd"],
+    ],
+    showscale: true,
+    colorbar: {
+      thickness: 10, len: 0.8,
+      tickfont: { color: "#A5A5B0", size: 10 },
+      outlinewidth: 0,
+    },
+    hovertemplate: "Day: %{y}<br>Hour: %{x}<br>Avg: %{z:.3f} kWh<extra></extra>",
+  }], WW.layout({
+    showlegend: false,
+    margin: { t: 6, r: 60, b: 60, l: 80 },
+    hovermode: "closest",
+    xaxis: { title: { text: "Hour of Day" }, tickangle: -45 },
+  }), WW.config());
+}
+
+function renderHourlyProfile(heatmap) {
+  const el = document.getElementById("hourly-profile-chart");
+  if (!heatmap || !heatmap.z) { setError(el, "No data"); return; }
+
+  // Column means (average per hour across all days)
+  const nHours = heatmap.hours.length;
+  const nDays  = heatmap.z.length;
+  const hourAvg = heatmap.hours.map((_, hi) => {
+    const col = heatmap.z.map(row => row[hi]);
+    return col.reduce((a, b) => a + b, 0) / nDays;
+  });
+
+  Plotly.react(el, [{
+    x: heatmap.hours.map(h => `${h}:00`),
+    y: hourAvg,
+    type: "bar",
+    marker: {
+      color: hourAvg.map(v => v > Math.max(...hourAvg) * 0.8 ? WW.PURPLE : WW.GREY),
+      borderradius: 3,
+    },
+    hovertemplate: "Hour %{x}: %{y:.3f} kWh<extra></extra>",
+    name: "Avg Usage",
+  }], WW.layout({
+    showlegend: false,
+    bargap: 0.2,
+    margin: { t: 6, r: 14, b: 70, l: 54 },
+    xaxis: { title: { text: "Hour" }, tickangle: -45 },
+    yaxis: { title: { text: "kWh" } },
+  }), WW.config());
+}
+
+loadAnalytics();
+</script>
+{% endblock %}

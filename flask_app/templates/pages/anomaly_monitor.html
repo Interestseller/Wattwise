@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+{% block page_title %}Anomaly Monitor{% endblock %}
+
+{% block header_action %}
+<button class="btn btn-primary" onclick="loadAnomalies()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </svg>
+  Run Detection
+</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Controls ───────────────────────────────────────────────────────────── -->
+<div class="filter-bar" style="margin-bottom:18px">
+  <span class="filter-label">Method:</span>
+  <div class="filter-group" id="method-filter">
+    <button class="filter-btn active" data-val="both"             onclick="setMethod('both')">Both</button>
+    <button class="filter-btn"        data-val="isolation_forest" onclick="setMethod('isolation_forest')">Isolation Forest</button>
+    <button class="filter-btn"        data-val="zscore"           onclick="setMethod('zscore')">Z-Score</button>
+  </div>
+  <span class="filter-label" style="margin-left:8px">Range:</span>
+  <div class="filter-group" id="anom-range">
+    <button class="filter-btn active" data-val="30"  onclick="setARange(30)">30d</button>
+    <button class="filter-btn"        data-val="60"  onclick="setARange(60)">60d</button>
+    <button class="filter-btn"        data-val="90"  onclick="setARange(90)">90d</button>
+  </div>
+</div>
+
+<!-- ── KPI Row ────────────────────────────────────────────────────────────── -->
+<div class="stats-row" id="anom-kpis">
+  <div class="stat-chip">
+    <span class="stat-chip-label">Total Anomalies</span>
+    <span class="stat-chip-value" id="anom-total">—</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Anomaly Rate</span>
+    <span class="stat-chip-value" id="anom-pct">—</span>
+    <span class="stat-chip-unit">% of readings</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">High Severity</span>
+    <span class="stat-chip-value" id="anom-high" style="color:var(--red)">—</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-chip-label">Medium Severity</span>
+    <span class="stat-chip-value" id="anom-medium" style="color:var(--amber)">—</span>
+  </div>
+</div>
+
+<!-- ── Anomaly Chart ───────────────────────────────────────────────────────── -->
+<div class="chart-card" style="margin-bottom:14px">
+  <div class="chart-card-header">
+    <div>
+      <div class="chart-card-title">Consumption with Anomalies Highlighted</div>
+      <div class="chart-card-sub">Red markers indicate detected anomalies · dashed line = expected baseline</div>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-item"><div class="legend-line" style="background:#9B87F5"></div> Actual</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4a4a55;border-top:2px dashed #4a4a55;height:0"></div> Expected</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div> Anomaly</div>
+    </div>
+  </div>
+  <div class="chart-container" id="anomaly-chart" style="height:300px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- ── Anomaly Table ───────────────────────────────────────────────────────── -->
+<div class="chart-card">
+  <div class="chart-card-header">
+    <div class="chart-card-title">Detected Anomalies</div>
+    <span id="anom-count-label" style="font-size:11px;color:var(--text-muted)">—</span>
+  </div>
+  <div id="anomaly-table" style="overflow-x:auto;margin-top:6px">
+    <div class="loading-spinner"><div class="spinner"></div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+let _method = "both";
+let _aRange = 30;
+
+function setMethod(m) {
+  _method = m;
+  document.querySelectorAll("#method-filter .filter-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.val === m));
+  loadAnomalies();
+}
+function setARange(d) {
+  _aRange = d;
+  document.querySelectorAll("#anom-range .filter-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.val == d));
+  loadAnomalies();
+}
+
+async function loadAnomalies() {
+  setLoading(document.getElementById("anomaly-chart"));
+  setLoading(document.getElementById("anomaly-table"));
+
+  const { ok, data } = await apiGet(`/api/anomalies?method=${_method}&days=${_aRange}`);
+
+  if (!ok || data.error) {
+    setError(document.getElementById("anomaly-chart"), data.error);
+    document.getElementById("anomaly-table").innerHTML =
+      `<div class="error-state"><span>${data.error}</span></div>`;
+    return;
+  }
+
+  showDemoBanner(data.is_demo);
+
+  // KPIs
+  document.getElementById("anom-total").textContent = data.total;
+  document.getElementById("anom-pct").textContent   = fmt(data.pct, 2);
+
+  const high   = data.anomalies.filter(a => a.severity === "high").length;
+  const medium = data.anomalies.filter(a => a.severity === "medium").length;
+  document.getElementById("anom-high").textContent   = high;
+  document.getElementById("anom-medium").textContent = medium;
+
+  document.getElementById("anom-count-label").textContent =
+    `${data.anomalies.length} anomal${data.anomalies.length !== 1 ? "ies" : "y"} detected`;
+
+  renderAnomalyChart(data.chart);
+  renderAnomalyTable(data.anomalies);
+}
+
+function renderAnomalyChart(chart) {
+  const el = document.getElementById("anomaly-chart");
+  const anomIdx = chart.is_anomaly.map((a, i) => a ? i : -1).filter(i => i >= 0);
+
+  const traces = [
+    // Actual line
+    {
+      x: chart.dates,
+      y: chart.values,
+      name: "Actual",
+      type: "scatter",
+      mode: "lines",
+      line: { color: WW.PURPLE, width: 1.8 },
+      hovertemplate: "%{y:.3f} kWh<extra>Actual</extra>",
+    },
+    // Expected baseline
+    {
+      x: chart.dates,
+      y: chart.expected,
+      name: "Expected",
+      type: "scatter",
+      mode: "lines",
+      line: { color: WW.GREY, width: 1.2, dash: "dash" },
+      hovertemplate: "%{y:.3f} kWh<extra>Expected</extra>",
+    },
+    // Anomaly markers
+    {
+      x: anomIdx.map(i => chart.dates[i]),
+      y: anomIdx.map(i => chart.values[i]),
+      name: "Anomaly",
+      type: "scatter",
+      mode: "markers",
+      marker: { color: WW.RED, size: 8, symbol: "circle", line: { color: "#fff", width: 1 } },
+      hovertemplate: "%{y:.3f} kWh<extra>Anomaly</extra>",
+    },
+  ];
+
+  Plotly.react(el, traces, WW.layout({
+    margin: { t: 6, r: 14, b: 50, l: 54 },
+    yaxis: { title: { text: "kWh" } },
+  }), WW.config());
+}
+
+function renderAnomalyTable(anomalies) {
+  const el = document.getElementById("anomaly-table");
+  if (!anomalies || !anomalies.length) {
+    el.innerHTML = `<div class="empty-state"><span>✅ No anomalies detected in this period.</span></div>`;
+    return;
+  }
+
+  const rows = anomalies.slice(0, 50).map(a => `
+    <tr class="anomaly-row-${a.severity}">
+      <td style="color:var(--text-primary)">${a.timestamp}</td>
+      <td>${fmt(a.value, 3)} kWh</td>
+      <td>${fmt(a.expected, 3)} kWh</td>
+      <td style="color:${a.deviation > 0 ? "var(--red)" : "var(--green)"}">${a.deviation > 0 ? "+" : ""}${fmt(a.deviation, 3)}</td>
+      <td>${fmt(a.score, 3)}</td>
+      <td><span class="badge badge-${a.severity}">${a.severity}</span></td>
+    </tr>`).join("");
+
+  el.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr><th>Timestamp</th><th>Observed</th><th>Expected</th><th>Deviation</th><th>Score</th><th>Severity</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${anomalies.length > 50 ? `<p style="padding:10px 12px;font-size:11px;color:var(--text-muted)">Showing top 50 of ${anomalies.length} anomalies.</p>` : ""}`;
+}
+
+loadAnomalies();
+</script>
+{% endblock %}

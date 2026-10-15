@@ -23,6 +23,7 @@
     "lag_12",
     "lag_24",
     "lag_48",
+    "lag_168",
     "rolling_mean_3",
     "rolling_std_3",
     "rolling_mean_6",
@@ -34,25 +35,24 @@
   ],
   "target_col": "Global_active_power",
   "training_info": {
-    "total_rows": 17473,
-    "train_rows": 12231,
-    "val_rows": 2621,
-    "test_rows": 2621,
-    "train_start": "2023-01-03 00:00:00",
-    "train_end": "2024-05-26 14:00:00",
-    "val_start": "2024-05-26 15:00:00",
-    "val_end": "2024-09-12 19:00:00",
-    "test_start": "2024-09-12 20:00:00",
+    "total_rows": 553,
+    "train_rows": 387,
+    "val_rows": 83,
+    "test_rows": 83,
+    "train_start": "2024-12-08 00:00:00",
+    "train_end": "2024-12-24 02:00:00",
+    "val_start": "2024-12-24 03:00:00",
+    "val_end": "2024-12-27 13:00:00",
+    "test_start": "2024-12-27 14:00:00",
     "test_end": "2024-12-31 00:00:00",
-    "total_training_seconds": 110.47,
+    "total_training_seconds": 4.04,
     "model_fit_seconds": {
-      "baseline": 0.0010001659393310547,
-      "random_forest": 24.699934720993042,
-      "gradient_boosting": 81.63233232498169,
-      "xgboost": 2.135131359100342
+      "baseline": 0.0,
+      "random_forest": 1.2242791652679443,
+      "gradient_boosting": 2.73846173286438
     },
     "target_col": "Global_active_power",
-    "feature_count": 30
+    "feature_count": 31
   },
   "app_version": "1.0.0"
 }
